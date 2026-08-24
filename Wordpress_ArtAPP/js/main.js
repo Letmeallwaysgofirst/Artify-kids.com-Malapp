@@ -11,7 +11,6 @@ class App {
     this.toastContainer = null;
     this._fillActive = false;
     this._currentColor = '#ff6b6b';
-    this._fillSettings = { tol: 45, lineThr: 100, seam: 1 };
   }
 
   async boot() {
@@ -54,7 +53,6 @@ class App {
     this._wireSave();
     this._wireTemplate();
     this._wireOverlayOpacity();
-    this._wireFillTuning();
     this._wireGallery();
     this._wireSound();
     this._wireShortcuts();
@@ -200,7 +198,7 @@ class App {
     tctx.imageSmoothingEnabled = false;
     tctx.drawImage(ov, dx, dy, dw, dh);
     const m = tctx.getImageData(0, 0, w, h).data;
-    const thr = this._fillSettings.lineThr;
+    const thr = 90; // Fester Schwellenwert für Linien-Erkennung
     let b = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) {
       const mi = i * 4;
@@ -252,7 +250,7 @@ class App {
     const [fR, fG, fB] = this._hexToRgb(fillHex);
     if (tR === fR && tG === fG && tB === fB && tA === 255) return false;
 
-    const tol = this._fillSettings.tol;
+    const tol = 28; // Feste Toleranz für präzises Ausfüllen
     const visited = new Uint8Array(w * h);
     const stack = [startX, startY];
     let filled = 0;
@@ -277,8 +275,8 @@ class App {
     if (filled === 0) return false;
 
     // Naht-Verschmelzung: helle Gräben zwischen Füllung und Linie schließen
-    const seam = this._fillSettings.seam | 0;
-    if (seam > 0) this._mergeSeams(d, w, h, fR, fG, fB, minX, maxX, minY, maxY, seam);
+    const seam = 2; // Fester Wert für saubere Kanten
+    this._mergeSeams(d, w, h, fR, fG, fB, minX, maxX, minY, maxY, seam);
 
     ctx.putImageData(imageData, 0, 0);
     return true;
@@ -396,21 +394,6 @@ class App {
   _hexToRgb(hex) {
     const n = parseInt(hex.slice(1), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  }
-
-  /* ═══════════════ FEINJUSTAGE-REGLER ═══════════════ */
-  _wireFillTuning() {
-    const bind = (id, valId, key) => {
-      const el = document.getElementById(id), lab = document.getElementById(valId);
-      if (!el) return;
-      el.addEventListener('input', () => {
-        this._fillSettings[key] = parseInt(el.value, 10);
-        if (lab) lab.textContent = el.value;
-      });
-    };
-    bind('fill-tol',  'val-tol',  'tol');
-    bind('fill-line', 'val-line', 'lineThr');
-    bind('fill-seam', 'val-seam', 'seam');
   }
 
   /* ═══════════════ VORLAGE-DECKKRAFT ═══════════════ */

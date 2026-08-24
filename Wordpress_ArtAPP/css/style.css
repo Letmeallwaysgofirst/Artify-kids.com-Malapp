@@ -440,43 +440,6 @@ body::after {
   box-shadow: var(--shadow-sm);
 }
 
-/* ===== Ausfüllen-Feinjustage ===== */
-.fill-tune {
-  margin-top: 12px; padding-top: 12px;
-  border-top: 1px solid var(--glass-border);
-  display: flex; flex-direction: column; gap: 9px;
-}
-.fill-tune-head {
-  font-family: var(--f-display);
-  font-size: 0.78rem; font-weight: 700;
-  opacity: 0.85; margin-bottom: 2px;
-}
-.tune-row { display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
-.tune-label {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 0.68rem; font-weight: 700; opacity: 0.75;
-}
-.tune-label b {
-  font-variant-numeric: tabular-nums;
-  color: var(--coral); opacity: 1; font-size: 0.72rem;
-}
-.tune-row input[type="range"] {
-  -webkit-appearance: none; appearance: none;
-  width: 100%; height: 5px; border-radius: 99px;
-  background: color-mix(in oklch, var(--ink) 12%, transparent);
-  outline: none; cursor: pointer;
-}
-.tune-row input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
-  background: var(--paper); border: 2.5px solid var(--coral);
-  box-shadow: var(--shadow-sm); transition: transform 0.15s var(--ease-spring);
-}
-.tune-row input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
-.tune-row input[type="range"]::-moz-range-thumb {
-  width: 16px; height: 16px; border-radius: 50%;
-  background: var(--paper); border: 2.5px solid var(--coral); box-shadow: var(--shadow-sm);
-}
-
 /* Akzent-Button (In Bild) */
 .flyout-btn-accent {
   background: var(--grad-coral, linear-gradient(135deg, var(--coral), var(--grape)));
