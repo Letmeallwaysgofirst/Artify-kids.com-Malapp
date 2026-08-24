@@ -424,27 +424,22 @@ export class CanvasEngine {
     } : null;
   }
 
+  /**
+   * Einfacher, robuster Flood-Fill (4-Wege Algorithmus)
+   * Stoppt hart an dunklen Linien und füllt NUR den geklickten Bereich
+   */
   _floodFill(startX, startY) {
-    if (this._filling) return;
-    this._filling = true;
-
     const width = this.width;
     const height = this.height;
     
     // Bounds check
-    if (startX < 0 || startX >= width || startY < 0 || startY >= height) {
-      this._filling = false;
-      return;
-    }
+    if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
 
     const imageData = this.ctx.getImageData(0, 0, width, height);
     const data = imageData.data;
     
     const targetColor = this._hexToRgb(this.color);
-    if (!targetColor) {
-      this._filling = false;
-      return;
-    }
+    if (!targetColor) return;
 
     const startPos = (startY * width + startX) * 4;
     const startR = data[startPos];
@@ -452,166 +447,84 @@ export class CanvasEngine {
     const startB = data[startPos + 2];
     const startA = data[startPos + 3];
 
-    // Don't fill if already same color (with slight tolerance for anti-aliasing)
-    const colorDiff = Math.abs(startR - targetColor.r) + Math.abs(startG - targetColor.g) + Math.abs(startB - targetColor.b);
-    if (colorDiff < 10 && startA > 200) {
-      this._filling = false;
-      return;
-    }
+    // Nicht füllen wenn transparent (außerhalb) oder schon gleiche Farbe
+    if (startA === 0) return;
+    if (Math.abs(startR - targetColor.r) < 5 && 
+        Math.abs(startG - targetColor.g) < 5 && 
+        Math.abs(startB - targetColor.b) < 5) return;
 
-    // Very strict boundary detection - dark lines block the fill
-    const isBoundary = (r, g, b) => {
-      const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
-      return brightness < 70; // Dark lines are boundaries
-    };
-
-    // If starting on a boundary, don't fill
-    if (isBoundary(startR, startG, startB)) {
-      this._filling = false;
-      return;
-    }
-
-    // Very low tolerance for precise filling
-    const TOLERANCE = 20;
+    // Harte Grenze: Alles dunkler als 80 ist eine Wand
+    const LINE_THRESHOLD = 80;
+    const startLuma = 0.299 * startR + 0.587 * startG + 0.114 * startB;
     
-    const matchesStartColor = (pos) => {
-      const r = data[pos];
-      const g = data[pos + 1];
-      const b = data[pos + 2];
+    // Wenn wir auf einer Linie klicken, nichts tun
+    if (startLuma < LINE_THRESHOLD) return;
+
+    // Prüft ob Pixel gefüllt werden darf
+    const canFill = (idx) => {
+      if (data[idx + 3] === 0) return false; // Transparent = Grenze
+      const luma = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+      if (luma < LINE_THRESHOLD) return false; // Dunkle Linie = Grenze
       
-      // Check if it's a boundary first
-      if (isBoundary(r, g, b)) return false;
-      
-      // Check color match with Euclidean distance
-      const dr = r - startR;
-      const dg = g - startG;
-      const db = b - startB;
-      return (dr * dr + dg * dg + db * db) <= (TOLERANCE * TOLERANCE);
+      // Farbe muss ähnlich zur Startfarbe sein
+      const dr = data[idx] - startR;
+      const dg = data[idx + 1] - startG;
+      const db = data[idx + 2] - startB;
+      return (dr * dr + dg * dg + db * db) <= 400; // Toleranz 20^2
     };
 
-    // Robust scanline flood fill algorithm
+    // Einfacher 4-Wege Stack Algorithmus
+    const stack = [[startX, startY]];
     const visited = new Uint8Array(width * height);
-    const stack = [];
-    
-    // Start with the initial point
-    stack.push({x: startX, y: startY});
     visited[startY * width + startX] = 1;
-    
-    let filledCount = 0;
-    const maxPixels = width * height * 0.99;
 
-    while (stack.length > 0 && filledCount < maxPixels) {
-      const {x, y} = stack.pop();
-      
-      // Scan left to find the leftmost pixel of this span
-      let xLeft = x;
-      while (xLeft > 0) {
-        const pos = (y * width + (xLeft - 1)) * 4;
-        if (!matchesStartColor(pos)) break;
-        xLeft--;
-      }
-      
-      // Scan right to find the rightmost pixel of this span
-      let xRight = x;
-      while (xRight < width - 1) {
-        const pos = (y * width + (xRight + 1)) * 4;
-        if (!matchesStartColor(pos)) break;
-        xRight++;
-      }
-      
-      // Fill the entire horizontal span
-      for (let i = xLeft; i <= xRight; i++) {
-        const idx = y * width + i;
-        if (visited[idx]) continue;
-        
-        const pos = idx * 4;
-        if (!matchesStartColor(pos)) continue;
-        
-        // Fill this pixel
-        visited[idx] = 1;
-        data[pos] = targetColor.r;
-        data[pos + 1] = targetColor.g;
-        data[pos + 2] = targetColor.b;
-        data[pos + 3] = 255;
-        filledCount++;
-      }
-      
-      // Check the row above (y - 1)
+    while (stack.length > 0) {
+      const [x, y] = stack.pop();
+      const idx = (y * width + x) * 4;
+
+      if (!canFill(idx)) continue;
+
+      // Pixel füllen
+      data[idx] = targetColor.r;
+      data[idx + 1] = targetColor.g;
+      data[idx + 2] = targetColor.b;
+      data[idx + 3] = 255;
+
+      // Nachbarn prüfen (4-Wege: oben, unten, links, rechts)
       if (y > 0) {
-        let newY = y - 1;
-        let lastMatched = false;
-        let spanStart = -1;
-        
-        for (let i = xLeft; i <= xRight; i++) {
-          const pos = (newY * width + i) * 4;
-          const matched = matchesStartColor(pos);
-          
-          if (matched && !lastMatched) {
-            // Start of a new span
-            spanStart = i;
-          } else if (!matched && lastMatched && spanStart !== -1) {
-            // End of a span, add middle point to stack
-            const spanEnd = i - 1;
-            const spanMid = Math.floor((spanStart + spanEnd) / 2);
-            if (!visited[newY * width + spanMid]) {
-              stack.push({x: spanMid, y: newY});
-              visited[newY * width + spanMid] = 1;
-            }
-            spanStart = -1;
-          }
-          lastMatched = matched;
-        }
-        
-        // Handle span that extends to the end
-        if (lastMatched && spanStart !== -1) {
-          const spanEnd = xRight;
-          const spanMid = Math.floor((spanStart + spanEnd) / 2);
-          if (!visited[newY * width + spanMid]) {
-            stack.push({x: spanMid, y: newY});
-            visited[newY * width + spanMid] = 1;
-          }
+        const nIdx = ((y - 1) * width + x) * 4;
+        const nVisIdx = (y - 1) * width + x;
+        if (!visited[nVisIdx] && canFill(nIdx)) {
+          visited[nVisIdx] = 1;
+          stack.push([x, y - 1]);
         }
       }
-      
-      // Check the row below (y + 1)
       if (y < height - 1) {
-        let newY = y + 1;
-        let lastMatched = false;
-        let spanStart = -1;
-        
-        for (let i = xLeft; i <= xRight; i++) {
-          const pos = (newY * width + i) * 4;
-          const matched = matchesStartColor(pos);
-          
-          if (matched && !lastMatched) {
-            // Start of a new span
-            spanStart = i;
-          } else if (!matched && lastMatched && spanStart !== -1) {
-            // End of a span, add middle point to stack
-            const spanEnd = i - 1;
-            const spanMid = Math.floor((spanStart + spanEnd) / 2);
-            if (!visited[newY * width + spanMid]) {
-              stack.push({x: spanMid, y: newY});
-              visited[newY * width + spanMid] = 1;
-            }
-            spanStart = -1;
-          }
-          lastMatched = matched;
+        const nIdx = ((y + 1) * width + x) * 4;
+        const nVisIdx = (y + 1) * width + x;
+        if (!visited[nVisIdx] && canFill(nIdx)) {
+          visited[nVisIdx] = 1;
+          stack.push([x, y + 1]);
         }
-        
-        // Handle span that extends to the end
-        if (lastMatched && spanStart !== -1) {
-          const spanEnd = xRight;
-          const spanMid = Math.floor((spanStart + spanEnd) / 2);
-          if (!visited[newY * width + spanMid]) {
-            stack.push({x: spanMid, y: newY});
-            visited[newY * width + spanMid] = 1;
-          }
+      }
+      if (x > 0) {
+        const nIdx = (y * width + (x - 1)) * 4;
+        const nVisIdx = y * width + (x - 1);
+        if (!visited[nVisIdx] && canFill(nIdx)) {
+          visited[nVisIdx] = 1;
+          stack.push([x - 1, y]);
+        }
+      }
+      if (x < width - 1) {
+        const nIdx = (y * width + (x + 1)) * 4;
+        const nVisIdx = y * width + (x + 1);
+        if (!visited[nVisIdx] && canFill(nIdx)) {
+          visited[nVisIdx] = 1;
+          stack.push([x + 1, y]);
         }
       }
     }
 
     this.ctx.putImageData(imageData, 0, 0);
-    this._filling = false;
   }
 }
