@@ -460,7 +460,6 @@ export class CanvasEngine {
 
     // Strict boundary detection for black contour lines
     const isBoundary = (r, g, b) => {
-      // Any pixel that's dark enough to be a contour line
       const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
       return brightness < 60;
     };
@@ -472,7 +471,6 @@ export class CanvasEngine {
     }
 
     // Fixed tolerance - no user adjustment needed
-    // Uses Euclidean distance in RGB space for accurate color matching
     const TOLERANCE = 28;
     const toleranceSquared = TOLERANCE * TOLERANCE;
 
@@ -483,78 +481,45 @@ export class CanvasEngine {
       return (dr * dr + dg * dg + db * db) <= toleranceSquared;
     };
 
-    // Scanline flood fill algorithm - much faster and more accurate
+    // Classic stack-based flood fill with proper boundary checking
     const visited = new Uint8Array(width * height);
-    const stack = [];
-    
-    // Push initial row segment
-    stack.push({ y: startY, x1: startX, x2: startX, dir: 1 });
-    stack.push({ y: startY, x1: startX, x2: startX, dir: -1 });
+    const stack = [startY * width + startX];
     
     let filledCount = 0;
-    const maxPixels = width * height * 0.95; // Safety limit
+    const maxPixels = width * height * 0.95;
 
     while (stack.length > 0 && filledCount < maxPixels) {
-      const { y, x1, x2, dir } = stack.pop();
+      const idx = stack.pop();
       
-      const newY = y + dir;
-      if (newY < 0 || newY >= height) continue;
-
-      // Fill the current row from x1 to x2
-      for (let x = x1; x <= x2; x++) {
-        const pos = (y * width + x) * 4;
-        const idx = y * width + x;
-        
-        if (visited[idx]) continue;
-        
-        const r = data[pos];
-        const g = data[pos + 1];
-        const b = data[pos + 2];
-        
-        // Stop at boundaries or non-matching colors
-        if (isBoundary(r, g, b) || !matchesStartColor(r, g, b)) continue;
-        
-        // Fill this pixel
-        visited[idx] = 1;
-        data[pos] = targetColor.r;
-        data[pos + 1] = targetColor.g;
-        data[pos + 2] = targetColor.b;
-        data[pos + 3] = 255;
-        filledCount++;
-      }
-
-      // Scan above/below for new segments
-      let lastMatched = false;
-      let segStart = -1;
+      if (visited[idx]) continue;
       
-      for (let x = x1; x <= x2; x++) {
-        const pos = (newY * width + x) * 4;
-        const idx = newY * width + x;
-        
-        if (visited[idx]) {
-          lastMatched = false;
-          continue;
-        }
-        
-        const r = data[pos];
-        const g = data[pos + 1];
-        const b = data[pos + 2];
-        
-        const isMatch = !isBoundary(r, g, b) && matchesStartColor(r, g, b);
-        
-        if (isMatch && !lastMatched) {
-          segStart = x;
-        } else if (!isMatch && lastMatched && segStart !== -1) {
-          stack.push({ y: newY, x1: segStart, x2: x - 1, dir: dir });
-          segStart = -1;
-        }
-        lastMatched = isMatch;
-      }
+      const y = Math.floor(idx / width);
+      const x = idx % width;
       
-      // Handle segment that extends to end
-      if (lastMatched && segStart !== -1) {
-        stack.push({ y: newY, x1: segStart, x2: x2, dir: dir });
-      }
+      // Check bounds
+      if (x < 0 || x >= width || y < 0 || y >= height) continue;
+      
+      const pos = idx * 4;
+      const r = data[pos];
+      const g = data[pos + 1];
+      const b = data[pos + 2];
+      
+      // Stop at boundaries or non-matching colors
+      if (isBoundary(r, g, b) || !matchesStartColor(r, g, b)) continue;
+      
+      // Fill this pixel
+      visited[idx] = 1;
+      data[pos] = targetColor.r;
+      data[pos + 1] = targetColor.g;
+      data[pos + 2] = targetColor.b;
+      data[pos + 3] = 255;
+      filledCount++;
+      
+      // Add neighbors (up, down, left, right)
+      if (y > 0) stack.push((y - 1) * width + x);
+      if (y < height - 1) stack.push((y + 1) * width + x);
+      if (x > 0) stack.push(y * width + (x - 1));
+      if (x < width - 1) stack.push(y * width + (x + 1));
     }
 
     this.ctx.putImageData(imageData, 0, 0);
