@@ -452,16 +452,17 @@ export class CanvasEngine {
     const startB = data[startPos + 2];
     const startA = data[startPos + 3];
 
-    // Don't fill if already same color
-    if (startR === targetColor.r && startG === targetColor.g && startB === targetColor.b && startA === 255) {
+    // Don't fill if already same color (with slight tolerance for anti-aliasing)
+    const colorDiff = Math.abs(startR - targetColor.r) + Math.abs(startG - targetColor.g) + Math.abs(startB - targetColor.b);
+    if (colorDiff < 10 && startA > 200) {
       this._filling = false;
       return;
     }
 
-    // Strict boundary detection for black contour lines
+    // Very strict boundary detection - dark lines block the fill
     const isBoundary = (r, g, b) => {
       const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
-      return brightness < 60;
+      return brightness < 70; // Dark lines are boundaries
     };
 
     // If starting on a boundary, don't fill
@@ -470,56 +471,144 @@ export class CanvasEngine {
       return;
     }
 
-    // Fixed tolerance - no user adjustment needed
-    const TOLERANCE = 28;
-    const toleranceSquared = TOLERANCE * TOLERANCE;
-
-    const matchesStartColor = (r, g, b) => {
-      const dr = r - startR;
-      const dg = g - startG;
-      const db = b - startB;
-      return (dr * dr + dg * dg + db * db) <= toleranceSquared;
-    };
-
-    // Classic stack-based flood fill with proper boundary checking
-    const visited = new Uint8Array(width * height);
-    const stack = [startY * width + startX];
+    // Very low tolerance for precise filling
+    const TOLERANCE = 20;
     
-    let filledCount = 0;
-    const maxPixels = width * height * 0.95;
-
-    while (stack.length > 0 && filledCount < maxPixels) {
-      const idx = stack.pop();
-      
-      if (visited[idx]) continue;
-      
-      const y = Math.floor(idx / width);
-      const x = idx % width;
-      
-      // Check bounds
-      if (x < 0 || x >= width || y < 0 || y >= height) continue;
-      
-      const pos = idx * 4;
+    const matchesStartColor = (pos) => {
       const r = data[pos];
       const g = data[pos + 1];
       const b = data[pos + 2];
       
-      // Stop at boundaries or non-matching colors
-      if (isBoundary(r, g, b) || !matchesStartColor(r, g, b)) continue;
+      // Check if it's a boundary first
+      if (isBoundary(r, g, b)) return false;
       
-      // Fill this pixel
-      visited[idx] = 1;
-      data[pos] = targetColor.r;
-      data[pos + 1] = targetColor.g;
-      data[pos + 2] = targetColor.b;
-      data[pos + 3] = 255;
-      filledCount++;
+      // Check color match with Euclidean distance
+      const dr = r - startR;
+      const dg = g - startG;
+      const db = b - startB;
+      return (dr * dr + dg * dg + db * db) <= (TOLERANCE * TOLERANCE);
+    };
+
+    // Robust scanline flood fill algorithm
+    const visited = new Uint8Array(width * height);
+    const stack = [];
+    
+    // Start with the initial point
+    stack.push({x: startX, y: startY});
+    visited[startY * width + startX] = 1;
+    
+    let filledCount = 0;
+    const maxPixels = width * height * 0.99;
+
+    while (stack.length > 0 && filledCount < maxPixels) {
+      const {x, y} = stack.pop();
       
-      // Add neighbors (up, down, left, right)
-      if (y > 0) stack.push((y - 1) * width + x);
-      if (y < height - 1) stack.push((y + 1) * width + x);
-      if (x > 0) stack.push(y * width + (x - 1));
-      if (x < width - 1) stack.push(y * width + (x + 1));
+      // Scan left to find the leftmost pixel of this span
+      let xLeft = x;
+      while (xLeft > 0) {
+        const pos = (y * width + (xLeft - 1)) * 4;
+        if (!matchesStartColor(pos)) break;
+        xLeft--;
+      }
+      
+      // Scan right to find the rightmost pixel of this span
+      let xRight = x;
+      while (xRight < width - 1) {
+        const pos = (y * width + (xRight + 1)) * 4;
+        if (!matchesStartColor(pos)) break;
+        xRight++;
+      }
+      
+      // Fill the entire horizontal span
+      for (let i = xLeft; i <= xRight; i++) {
+        const idx = y * width + i;
+        if (visited[idx]) continue;
+        
+        const pos = idx * 4;
+        if (!matchesStartColor(pos)) continue;
+        
+        // Fill this pixel
+        visited[idx] = 1;
+        data[pos] = targetColor.r;
+        data[pos + 1] = targetColor.g;
+        data[pos + 2] = targetColor.b;
+        data[pos + 3] = 255;
+        filledCount++;
+      }
+      
+      // Check the row above (y - 1)
+      if (y > 0) {
+        let newY = y - 1;
+        let lastMatched = false;
+        let spanStart = -1;
+        
+        for (let i = xLeft; i <= xRight; i++) {
+          const pos = (newY * width + i) * 4;
+          const matched = matchesStartColor(pos);
+          
+          if (matched && !lastMatched) {
+            // Start of a new span
+            spanStart = i;
+          } else if (!matched && lastMatched && spanStart !== -1) {
+            // End of a span, add middle point to stack
+            const spanEnd = i - 1;
+            const spanMid = Math.floor((spanStart + spanEnd) / 2);
+            if (!visited[newY * width + spanMid]) {
+              stack.push({x: spanMid, y: newY});
+              visited[newY * width + spanMid] = 1;
+            }
+            spanStart = -1;
+          }
+          lastMatched = matched;
+        }
+        
+        // Handle span that extends to the end
+        if (lastMatched && spanStart !== -1) {
+          const spanEnd = xRight;
+          const spanMid = Math.floor((spanStart + spanEnd) / 2);
+          if (!visited[newY * width + spanMid]) {
+            stack.push({x: spanMid, y: newY});
+            visited[newY * width + spanMid] = 1;
+          }
+        }
+      }
+      
+      // Check the row below (y + 1)
+      if (y < height - 1) {
+        let newY = y + 1;
+        let lastMatched = false;
+        let spanStart = -1;
+        
+        for (let i = xLeft; i <= xRight; i++) {
+          const pos = (newY * width + i) * 4;
+          const matched = matchesStartColor(pos);
+          
+          if (matched && !lastMatched) {
+            // Start of a new span
+            spanStart = i;
+          } else if (!matched && lastMatched && spanStart !== -1) {
+            // End of a span, add middle point to stack
+            const spanEnd = i - 1;
+            const spanMid = Math.floor((spanStart + spanEnd) / 2);
+            if (!visited[newY * width + spanMid]) {
+              stack.push({x: spanMid, y: newY});
+              visited[newY * width + spanMid] = 1;
+            }
+            spanStart = -1;
+          }
+          lastMatched = matched;
+        }
+        
+        // Handle span that extends to the end
+        if (lastMatched && spanStart !== -1) {
+          const spanEnd = xRight;
+          const spanMid = Math.floor((spanStart + spanEnd) / 2);
+          if (!visited[newY * width + spanMid]) {
+            stack.push({x: spanMid, y: newY});
+            visited[newY * width + spanMid] = 1;
+          }
+        }
+      }
     }
 
     this.ctx.putImageData(imageData, 0, 0);
