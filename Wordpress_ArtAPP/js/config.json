@@ -1,0 +1,71 @@
+{
+  "appName": "Malen mit Artify-Kids",
+  "version": "2.1.0",
+  "canvas": {
+    "width": 1240,
+    "height": 1754,
+    "aspectRatio": "210/297",
+    "background": "#FFFFFF"
+  },
+  "colors": [
+    { "name": "Korallenrot", "hex": "#FF6B6B" },
+    { "name": "Sonnengelb", "hex": "#FFD93D" },
+    { "name": "Himmelblau", "hex": "#4FC3F7" },
+    { "name": "Mintgruen", "hex": "#4ECDC4" },
+    { "name": "Traubenlila", "hex": "#9B59B6" },
+    { "name": "Rosa", "hex": "#FF8ED4" },
+    { "name": "Tintenindigo", "hex": "#31295e" },
+    { "name": "Waldgruen", "hex": "#6BCB77" },
+    { "name": "Orange", "hex": "#FF9F43" },
+    { "name": "Braun", "hex": "#8B5E3C" },
+    { "name": "Schwarz", "hex": "#000000" },
+    { "name": "Weiss", "hex": "#FFFFFF" }
+  ],
+  "brushSizes": [
+    { "label": "Winzig", "size": 2, "dotSize": 8 },
+    { "label": "Klein", "size": 5, "dotSize": 12 },
+    { "label": "Mittel", "size": 10, "dotSize": 18 },
+    { "label": "Gross", "size": 20, "dotSize": 26 },
+    { "label": "Riesig", "size": 40, "dotSize": 36 }
+  ],
+  "tools": {
+    "brush": { "key": "b", "defaultSize": 10, "lineCap": "round", "lineJoin": "round" },
+    "rainbow": { "key": "r", "defaultSize": 10, "lineCap": "round", "hueSpeed": 5 },
+    "spray": { "key": "s", "defaultSize": 20, "density": 30, "radius": 20 },
+    "eraser": { "key": "e", "defaultSize": 20, "compositeOp": "destination-out" }
+  },
+  "mirror": { "options": [0, 2, 4, 8], "default": 0 },
+  "undo": { "maxSteps": 30, "redoEnabled": true },
+  "sounds": {
+    "enabled": true,
+    "volume": 0.4,
+    "saveSound": { "frequency": 880, "duration": 0.15, "type": "sine" },
+    "clickSound": { "frequency": 660, "duration": 0.08, "type": "sine" },
+    "undoSound": { "frequency": 440, "duration": 0.1, "type": "triangle" }
+  },
+  "save": {
+    "endpoint": "/save",
+    "format": "image/png",
+    "quality": 1.0,
+    "maxSizeMB": 15
+  },
+  "gallery": {
+    "endpoint": "/gallery",
+    "filePrefix": "kunstwerk_",
+    "thumbnailWidth": 160,
+    "refreshAfterSave": true
+  },
+  "overlay": {
+    "blendMode": "multiply",
+    "allowedTypes": ["image/png", "image/jpeg", "image/svg+xml"],
+    "maxFileSizeMB": 5
+  },
+  "shortcuts": {
+    "brush": "b",
+    "rainbow": "r",
+    "spray": "s",
+    "eraser": "e",
+    "undo": "ctrl+z",
+    "redo": "ctrl+y"
+  }
+}

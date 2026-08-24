@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Malen mit Artify-Kids 🎨</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/canvas.css" />
+  <link rel="stylesheet" href="css/brand.css" />
+</head>
+<body>
+
+<!-- Ambient Orbs (weiche Lichtflecken) -->
+<div class="floating-doodles" aria-hidden="true">
+  <span class="doodle" style="--x:-5%;  --y:8%;   --s:420px; --d:24s"></span>
+  <span class="doodle" style="--x:72%;  --y:-8%;  --s:360px; --d:28s"></span>
+  <span class="doodle" style="--x:58%;  --y:68%;  --s:300px; --d:22s"></span>
+  <span class="doodle" style="--x:15%;  --y:78%;  --s:260px; --d:26s"></span>
+</div>
+
+<header class="app-header">
+  <div class="header-side header-left" aria-hidden="true">
+    <span class="crayon-dot" style="--i:0"></span>
+    <span class="crayon-dot" style="--i:1"></span>
+    <span class="crayon-dot" style="--i:2"></span>
+  </div>
+
+  <h1 class="logo">
+    <span class="logo-emoji" aria-hidden="true">🎨</span>
+    <span class="logo-lead">Malen mit</span>
+    <span class="logo-name"><span class="logo-letter">A</span><span class="logo-letter">r</span><span class="logo-letter">t</span><span class="logo-letter">i</span><span class="logo-letter">f</span><span class="logo-letter">y</span><span class="logo-letter">-</span><span class="logo-letter">K</span><span class="logo-letter">i</span><span class="logo-letter">d</span><span class="logo-letter">s</span></span>
+  </h1>
+
+  <div class="header-side header-right">
+    <button id="btn-sound"    class="btn-icon" aria-label="Sound an/aus">🔊</button>
+    <button id="btn-darkmode" class="btn-icon" aria-label="Dunkelmodus umschalten">🌙</button>
+    <button id="btn-gallery"  class="btn-icon" aria-label="Galerie öffnen">🖼️</button>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- ===== Tool-Rail ===== -->
+  <nav class="tool-rail" aria-label="Malwerkzeuge">
+    <div class="rail-group" role="group" aria-label="Werkzeuge">
+      <button id="btn-brush"   class="rail-btn btn-tool active" data-tip="Pinsel (B)"     aria-label="Pinsel">🖌️</button>
+      <button id="btn-rainbow" class="rail-btn btn-tool"        data-tip="Regenbogen (R)" aria-label="Regenbogen">🌈</button>
+      <button id="btn-spray"   class="rail-btn btn-tool"        data-tip="Sprühdose (S)"  aria-label="Sprühdose">💨</button>
+      <button id="btn-eraser"  class="rail-btn btn-tool"        data-tip="Radierer (E)"   aria-label="Radierer">🧹</button>
+      <button id="btn-fill"    class="rail-btn btn-tool"        data-tip="Ausfüllen (F)"  aria-label="Ausfüllen">🪣</button>
+    </div>
+
+    <span class="rail-divider" aria-hidden="true"></span>
+
+    <div class="rail-group" role="group" aria-label="Einstellungen">
+      <button class="rail-btn rail-toggle" data-panel="panel-mirror"   data-tip="Spiegel" aria-label="Spiegel" aria-expanded="false">🪄</button>
+      <button class="rail-btn rail-toggle" data-panel="panel-colors"   data-tip="Farben"  aria-label="Farben"  aria-expanded="false">🎨</button>
+      <button class="rail-btn rail-toggle" data-panel="panel-size"     data-tip="Größe"   aria-label="Pinselgröße" aria-expanded="false">📏</button>
+      <button class="rail-btn rail-toggle" data-panel="panel-template" data-tip="Vorlage" aria-label="Vorlage" aria-expanded="false">📂</button>
+    </div>
+
+    <span class="rail-divider" aria-hidden="true"></span>
+
+    <div class="rail-group" role="group" aria-label="Bearbeiten">
+      <button id="btn-undo"  class="rail-btn rail-mini" data-tip="Rückgängig (Strg+Z)"  aria-label="Rückgängig">↩️</button>
+      <button id="btn-redo"  class="rail-btn rail-mini" data-tip="Wiederholen (Strg+Y)" aria-label="Wiederholen">↪️</button>
+      <button id="btn-clear" class="rail-btn rail-mini" data-tip="Bild leeren"          aria-label="Bild leeren">🗑️</button>
+    </div>
+
+    <div class="rail-spacer"></div>
+
+    <button id="btn-save" class="rail-btn rail-save" data-tip="Speichern (Strg+S)" aria-label="Kunstwerk speichern">
+      <span class="tool-emoji">💾</span><span class="tool-label">Speichern</span>
+    </button>
+  </nav>
+
+  <!-- ===== Flyout-Panels ===== -->
+  <section class="flyout" id="panel-mirror" aria-label="Spiegel">
+    <h3 class="flyout-title">🪄 Spiegel</h3>
+    <div class="mirror-grid">
+      <button class="btn-mirror active" data-mirror="0">✖️<span class="tool-label">Aus</span></button>
+      <button class="btn-mirror" data-mirror="2">2×</button>
+      <button class="btn-mirror" data-mirror="4">4×</button>
+      <button class="btn-mirror" data-mirror="8">8×</button>
+    </div>
+  </section>
+
+  <section class="flyout" id="panel-colors" aria-label="Farben">
+    <h3 class="flyout-title">🎨 Farben</h3>
+    <div class="color-palette" id="color-palette"></div>
+    <div class="custom-color-row">
+      <input type="color" id="color-picker" class="color-picker" value="#ff6b6b" />
+      <label class="picker-label" for="color-picker">Eigene Farbe</label>
+    </div>
+  </section>
+
+  <section class="flyout" id="panel-size" aria-label="Pinselgröße">
+    <h3 class="flyout-title">📏 Größe</h3>
+    <div class="size-buttons" id="size-picker"></div>
+  </section>
+
+  <section class="flyout" id="panel-template" aria-label="Vorlage">
+    <h3 class="flyout-title">📂 Vorlage</h3>
+    <label class="flyout-btn" for="btn-template">📁 Bild laden</label>
+    <input type="file" id="btn-template" accept="image/png,image/jpeg,image/svg+xml" hidden />
+
+    <!-- Deckkraft der schwebenden Vorlage -->
+    <div class="overlay-opacity-row">
+      <span class="opacity-icon" aria-hidden="true">👁️</span>
+      <input type="range" id="overlay-opacity" min="10" max="100" value="90" aria-label="Deckkraft der Vorlage" />
+      <span class="opacity-value" id="opacity-value">90%</span>
+    </div>
+
+    <!-- Feinjustage fürs Ausfüllen -->
+    <div class="fill-tune">
+      <p class="fill-tune-head">🪣 Ausfüllen feinjustieren</p>
+      <label class="tune-row">
+        <span class="tune-label">Farb‑Toleranz <b id="val-tol">45</b></span>
+        <input type="range" id="fill-tol" min="0" max="120" value="45" />
+      </label>
+      <label class="tune-row">
+        <span class="tune-label">Linien‑Erkennung <b id="val-line">100</b></span>
+        <input type="range" id="fill-line" min="40" max="200" value="100" />
+      </label>
+      <label class="tune-row">
+        <span class="tune-label">Säume schließen <b id="val-seam">1</b> px</span>
+        <input type="range" id="fill-seam" min="0" max="3" value="1" />
+      </label>
+    </div>
+
+    <div id="overlay-controls" class="overlay-controls hidden">
+      <button id="btn-overlay-toggle" class="flyout-btn"><span class="tool-emoji">👁️</span> Anzeigen</button>
+      <button id="btn-overlay-bake"   class="flyout-btn flyout-btn-accent"><span class="tool-emoji">🖼️</span> In Bild</button>
+      <button id="btn-overlay-remove" class="flyout-btn">❌ Entfernen</button>
+    </div>
+  </section>
+
+  <!-- ===== Malfläche ===== -->
+  <section class="canvas-area">
+    <div class="stage">
+      <div class="paper-wrap">
+        <div class="paper">
+          <canvas id="draw-canvas"></canvas>
+          <img id="overlay-img" alt="" draggable="false" />
+          <div class="stage-hint" id="stage-hint"><span>✨</span>Mal hier los!</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* Flyout-Logik – unabhängig von main.js */
+(function () {
+  const main    = document.querySelector('.app-main');
+  const toggles = [...document.querySelectorAll('.rail-toggle')];
+  const panels  = [...document.querySelectorAll('.flyout')];
+
+  function closeAll() {
+    panels.forEach(p => p.classList.remove('open'));
+    toggles.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-expanded', 'false'); });
+  }
+  function position(panel, btn) {
+    if (window.innerWidth <= 768) return;
+    const m = main.getBoundingClientRect();
+    const b = btn.getBoundingClientRect();
+    const top = Math.max(10, Math.min(b.top - m.top, m.height - panel.offsetHeight - 14));
+    panel.style.top = top + 'px';
+  }
+
+  toggles.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const panel  = document.getElementById(btn.dataset.panel);
+      const isOpen = panel.classList.contains('open');
+      closeAll();
+      if (!isOpen) {
+        position(panel, btn);
+        panel.classList.add('open');
+        btn.classList.add('active');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+
+  document.addEventListener('pointerdown', e => {
+    if (!e.target.closest('.flyout') && !e.target.closest('.rail-toggle')) closeAll();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
+  window.addEventListener('resize', closeAll);
+})();
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
