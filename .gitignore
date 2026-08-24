@@ -9,38 +9,36 @@ build/
 target/
 
 # Dependencies
-node_modules/
-venv/
 .venv/
-.env
-.env.local
-.env.*
+venv/
+node_modules/
+.mypy_cache/
+.pytest_cache/
+.gradle/
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*
 
 # Editors
 .vscode/
 .idea/
 
-# OS specific
+# System files
 .DS_Store
 Thumbs.db
 
 # Coverage
-.coverage
 coverage/
 htmlcov/
-
-# Python specific
-*.pyc
-__pycache__/
-*.pyo
-*.pyd
-.Python
-*.so
+.coverage
 
 # Compressed files
 *.zip

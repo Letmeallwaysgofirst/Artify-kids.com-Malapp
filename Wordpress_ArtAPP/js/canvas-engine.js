@@ -424,14 +424,6 @@ export class CanvasEngine {
     } : null;
   }
 
-  _colorDistance(r1, g1, b1, r2, g2, b2) {
-    return Math.sqrt(
-      Math.pow(r1 - r2, 2) +
-      Math.pow(g1 - g2, 2) +
-      Math.pow(b1 - b2, 2)
-    );
-  }
-
   _floodFill(startX, startY) {
     if (this._filling) return;
     this._filling = true;
@@ -460,48 +452,109 @@ export class CanvasEngine {
     const startB = data[startPos + 2];
     const startA = data[startPos + 3];
 
-    // Don't fill if same color
+    // Don't fill if already same color
     if (startR === targetColor.r && startG === targetColor.g && startB === targetColor.b && startA === 255) {
       this._filling = false;
       return;
     }
 
-    const tolerance = this.fillTolerance;
+    // Strict boundary detection for black contour lines
+    const isBoundary = (r, g, b) => {
+      // Any pixel that's dark enough to be a contour line
+      const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
+      return brightness < 60;
+    };
+
+    // If starting on a boundary, don't fill
+    if (isBoundary(startR, startG, startB)) {
+      this._filling = false;
+      return;
+    }
+
+    // Fixed tolerance - no user adjustment needed
+    // Uses Euclidean distance in RGB space for accurate color matching
+    const TOLERANCE = 28;
+    const toleranceSquared = TOLERANCE * TOLERANCE;
+
+    const matchesStartColor = (r, g, b) => {
+      const dr = r - startR;
+      const dg = g - startG;
+      const db = b - startB;
+      return (dr * dr + dg * dg + db * db) <= toleranceSquared;
+    };
+
+    // Scanline flood fill algorithm - much faster and more accurate
     const visited = new Uint8Array(width * height);
-    const stack = [[startX, startY]];
+    const stack = [];
+    
+    // Push initial row segment
+    stack.push({ y: startY, x1: startX, x2: startX, dir: 1 });
+    stack.push({ y: startY, x1: startX, x2: startX, dir: -1 });
+    
     let filledCount = 0;
-    const maxPixels = width * height;
+    const maxPixels = width * height * 0.95; // Safety limit
 
     while (stack.length > 0 && filledCount < maxPixels) {
-      const [x, y] = stack.pop();
-      const pos = (y * width + x) * 4;
-      const pixelIndex = y * width + x;
+      const { y, x1, x2, dir } = stack.pop();
+      
+      const newY = y + dir;
+      if (newY < 0 || newY >= height) continue;
 
-      if (visited[pixelIndex]) continue;
-      if (x < 0 || x >= width || y < 0 || y >= height) continue;
+      // Fill the current row from x1 to x2
+      for (let x = x1; x <= x2; x++) {
+        const pos = (y * width + x) * 4;
+        const idx = y * width + x;
+        
+        if (visited[idx]) continue;
+        
+        const r = data[pos];
+        const g = data[pos + 1];
+        const b = data[pos + 2];
+        
+        // Stop at boundaries or non-matching colors
+        if (isBoundary(r, g, b) || !matchesStartColor(r, g, b)) continue;
+        
+        // Fill this pixel
+        visited[idx] = 1;
+        data[pos] = targetColor.r;
+        data[pos + 1] = targetColor.g;
+        data[pos + 2] = targetColor.b;
+        data[pos + 3] = 255;
+        filledCount++;
+      }
 
-      const r = data[pos];
-      const g = data[pos + 1];
-      const b = data[pos + 2];
-      const a = data[pos + 3];
-
-      // Check if color matches within tolerance
-      const distance = this._colorDistance(r, g, b, startR, startG, startB);
-      if (distance > tolerance) continue;
-
-      // Mark as visited and fill
-      visited[pixelIndex] = 1;
-      data[pos] = targetColor.r;
-      data[pos + 1] = targetColor.g;
-      data[pos + 2] = targetColor.b;
-      data[pos + 3] = 255;
-      filledCount++;
-
-      // Add neighbors to stack (4-directional)
-      stack.push([x + 1, y]);
-      stack.push([x - 1, y]);
-      stack.push([x, y + 1]);
-      stack.push([x, y - 1]);
+      // Scan above/below for new segments
+      let lastMatched = false;
+      let segStart = -1;
+      
+      for (let x = x1; x <= x2; x++) {
+        const pos = (newY * width + x) * 4;
+        const idx = newY * width + x;
+        
+        if (visited[idx]) {
+          lastMatched = false;
+          continue;
+        }
+        
+        const r = data[pos];
+        const g = data[pos + 1];
+        const b = data[pos + 2];
+        
+        const isMatch = !isBoundary(r, g, b) && matchesStartColor(r, g, b);
+        
+        if (isMatch && !lastMatched) {
+          segStart = x;
+        } else if (!isMatch && lastMatched && segStart !== -1) {
+          stack.push({ y: newY, x1: segStart, x2: x - 1, dir: dir });
+          segStart = -1;
+        }
+        lastMatched = isMatch;
+      }
+      
+      // Handle segment that extends to end
+      if (lastMatched && segStart !== -1) {
+        stack.push({ y: newY, x1: segStart, x2: x2, dir: dir });
+      }
     }
 
     this.ctx.putImageData(imageData, 0, 0);
