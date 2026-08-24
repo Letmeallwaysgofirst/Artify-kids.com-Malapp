@@ -139,7 +139,7 @@ class App {
       const scaleY = canvas.height / rect.height;
       const x = Math.floor((e.clientX - rect.left) * scaleX);
       const y = Math.floor((e.clientY - rect.top)  * scaleY);
-      const filled = this._floodFill(x, y, this._currentColor);
+      const filled = this._floodFillAuto(x, y, this._currentColor);
       if (filled) {
         this.engine.saveSnapshot();
         this._hideStageHint();
@@ -233,7 +233,7 @@ class App {
     return out;
   }
 
-  /* ── Flood Fill + Naht-Verschmelzung ── */
+  /* ── Flood Fill + Naht-Verschmelzung (für manuelle Nutzung mit Boundary) ── */
   _floodFill(startX, startY, fillHex) {
     const canvas = document.getElementById('draw-canvas');
     const ctx = this.engine.ctx;
@@ -279,6 +279,76 @@ class App {
     // Naht-Verschmelzung: helle Gräben zwischen Füllung und Linie schließen
     const seam = this._fillSettings.seam | 0;
     if (seam > 0) this._mergeSeams(d, w, h, fR, fG, fB, minX, maxX, minY, maxY, seam);
+
+    ctx.putImageData(imageData, 0, 0);
+    return true;
+  }
+
+  /* ── Auto Flood Fill OHNE Boundary-Map – funktioniert immer & überall ── */
+  _floodFillAuto(startX, startY, fillHex) {
+    const canvas = document.getElementById('draw-canvas');
+    const ctx = this.engine.ctx;
+    const w = canvas.width, h = canvas.height;
+    if (startX < 0 || startX >= w || startY < 0 || startY >= h) return false;
+
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const d = imageData.data;
+
+    const startPi = startY * w + startX;
+    const si = startPi * 4;
+    const tR = d[si], tG = d[si + 1], tB = d[si + 2], tA = d[si + 3];
+    const [fR, fG, fB] = this._hexToRgb(fillHex);
+    
+    // Nicht füllen wenn bereits dieselbe Farbe
+    if (tR === fR && tG === fG && tB === fB && tA === 255) return false;
+
+    // Auto-Toleranz: je nach Helligkeit anpassen
+    const brightness = (tR + tG + tB) / 3;
+    let autoTol = 35;
+    if (brightness > 200) autoTol = 50;       // Sehr helle Flächen → höhere Toleranz
+    else if (brightness < 50) autoTol = 25;   // Sehr dunkle Flächen → niedrigere Toleranz
+    
+    const visited = new Uint8Array(w * h);
+    const stack = [[startX, startY]];
+    let filled = 0;
+    let minX = startX, maxX = startX, minY = startY, maxY = startY;
+
+    while (stack.length > 0) {
+      const [x, y] = stack.pop();
+      if (x < 0 || x >= w || y < 0 || y >= h) continue;
+      const pi = y * w + x;
+      if (visited[pi]) continue;
+      
+      const i = pi * 4;
+      const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
+      
+      // Euklidische Distanz für präzisere Farberkennung
+      const dist = Math.sqrt(
+        Math.pow(r - tR, 2) + 
+        Math.pow(g - tG, 2) + 
+        Math.pow(b - tB, 2)
+      );
+      if (dist > autoTol) continue;
+      
+      visited[pi] = 1;
+      d[i] = fR; d[i + 1] = fG; d[i + 2] = fB; d[i + 3] = 255;
+      filled++;
+      
+      if (x < minX) minX = x; else if (x > maxX) maxX = x;
+      if (y < minY) minY = y; else if (y > maxY) maxY = y;
+      
+      // 4-directional flood fill
+      stack.push([x + 1, y]);
+      stack.push([x - 1, y]);
+      stack.push([x, y + 1]);
+      stack.push([x, y - 1]);
+    }
+    
+    if (filled === 0) return false;
+
+    // Naht-Verschmelzung für saubere Kanten
+    const seam = 2;
+    this._mergeSeams(d, w, h, fR, fG, fB, minX, maxX, minY, maxY, seam);
 
     ctx.putImageData(imageData, 0, 0);
     return true;

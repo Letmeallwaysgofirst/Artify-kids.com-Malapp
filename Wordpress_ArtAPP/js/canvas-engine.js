@@ -20,6 +20,7 @@ export class CanvasEngine {
     this.brushSize = config.brushSizes[2].size;
     this.mirrorMode = 0;
     this.hue = 0;
+    this.fillTolerance = 30; // Auto-tolerance for flood fill
 
     this.isDrawing = false;
     this.lastX = 0;
@@ -38,6 +39,7 @@ export class CanvasEngine {
     this._mirroredPointsCache = new Map();
     this._strokeStyleCache = null;
     this._lastStrokeColor = null;
+    this._filling = false;
 
     this._bindPointerEvents();
     this.updateCursor();
@@ -173,10 +175,19 @@ export class CanvasEngine {
 
   _onPointerDown(e) {
     e.preventDefault();
-    if (this.isDrawing) return;
+    if (this.isDrawing || this._filling) return;
     try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {}
     this.isDrawing = true;
     const pos = this._getCanvasPos(e);
+    
+    // Flood fill tool - execute on click, not drawing
+    if (this.tool === 'fill') {
+      this._floodFill(Math.floor(pos.x), Math.floor(pos.y));
+      this.isDrawing = false;
+      this.saveSnapshot();
+      return;
+    }
+    
     this.lastX = pos.x;
     this.lastY = pos.y;
     this.points = [pos];
@@ -402,5 +413,98 @@ export class CanvasEngine {
       }
       this.ctx.restore();
     }
+  }
+
+  _hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : null;
+  }
+
+  _colorDistance(r1, g1, b1, r2, g2, b2) {
+    return Math.sqrt(
+      Math.pow(r1 - r2, 2) +
+      Math.pow(g1 - g2, 2) +
+      Math.pow(b1 - b2, 2)
+    );
+  }
+
+  _floodFill(startX, startY) {
+    if (this._filling) return;
+    this._filling = true;
+
+    const width = this.width;
+    const height = this.height;
+    
+    // Bounds check
+    if (startX < 0 || startX >= width || startY < 0 || startY >= height) {
+      this._filling = false;
+      return;
+    }
+
+    const imageData = this.ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    
+    const targetColor = this._hexToRgb(this.color);
+    if (!targetColor) {
+      this._filling = false;
+      return;
+    }
+
+    const startPos = (startY * width + startX) * 4;
+    const startR = data[startPos];
+    const startG = data[startPos + 1];
+    const startB = data[startPos + 2];
+    const startA = data[startPos + 3];
+
+    // Don't fill if same color
+    if (startR === targetColor.r && startG === targetColor.g && startB === targetColor.b && startA === 255) {
+      this._filling = false;
+      return;
+    }
+
+    const tolerance = this.fillTolerance;
+    const visited = new Uint8Array(width * height);
+    const stack = [[startX, startY]];
+    let filledCount = 0;
+    const maxPixels = width * height;
+
+    while (stack.length > 0 && filledCount < maxPixels) {
+      const [x, y] = stack.pop();
+      const pos = (y * width + x) * 4;
+      const pixelIndex = y * width + x;
+
+      if (visited[pixelIndex]) continue;
+      if (x < 0 || x >= width || y < 0 || y >= height) continue;
+
+      const r = data[pos];
+      const g = data[pos + 1];
+      const b = data[pos + 2];
+      const a = data[pos + 3];
+
+      // Check if color matches within tolerance
+      const distance = this._colorDistance(r, g, b, startR, startG, startB);
+      if (distance > tolerance) continue;
+
+      // Mark as visited and fill
+      visited[pixelIndex] = 1;
+      data[pos] = targetColor.r;
+      data[pos + 1] = targetColor.g;
+      data[pos + 2] = targetColor.b;
+      data[pos + 3] = 255;
+      filledCount++;
+
+      // Add neighbors to stack (4-directional)
+      stack.push([x + 1, y]);
+      stack.push([x - 1, y]);
+      stack.push([x, y + 1]);
+      stack.push([x, y - 1]);
+    }
+
+    this.ctx.putImageData(imageData, 0, 0);
+    this._filling = false;
   }
 }
