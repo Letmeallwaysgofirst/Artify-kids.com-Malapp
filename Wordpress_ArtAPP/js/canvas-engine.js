@@ -1,7 +1,7 @@
 export class CanvasEngine {
   constructor(canvasEl, overlayEl, config) {
     this.canvas = canvasEl;
-    this.ctx = canvasEl.getContext('2d');
+    this.ctx = canvasEl.getContext('2d', { alpha: false, desynchronized: true });
     this.overlay = overlayEl;
     this.config = config;
 
@@ -35,6 +35,10 @@ export class CanvasEngine {
     this._loadToken = 0;
     this.overlayVisible = true;
 
+    this._mirroredPointsCache = new Map();
+    this._strokeStyleCache = null;
+    this._lastStrokeColor = null;
+
     this._bindPointerEvents();
     this.updateCursor();
     this.saveSnapshot();
@@ -50,6 +54,7 @@ export class CanvasEngine {
     this.ctx.lineJoin = 'round';
     this.ctx.fillStyle = this.config.canvas.background || '#FFFFFF';
     this.ctx.fillRect(0, 0, this.width, this.height);
+    this._mirroredPointsCache.clear();
   }
 
   setTool(toolName) {
@@ -222,9 +227,18 @@ export class CanvasEngine {
     if (this.tool === 'eraser') return 'rgba(0,0,0,1)';
     if (this.tool === 'rainbow') {
       this.hue = (this.hue + this.config.tools.rainbow.hueSpeed) % 360;
-      return `hsl(${this.hue}, 80%, 55%)`;
+      const color = `hsl(${this.hue}, 80%, 55%)`;
+      if (this._lastStrokeColor !== color) {
+        this._strokeStyleCache = color;
+        this._lastStrokeColor = color;
+      }
+      return this._strokeStyleCache;
     }
-    return this.color;
+    if (this._lastStrokeColor !== this.color) {
+      this._strokeStyleCache = this.color;
+      this._lastStrokeColor = this.color;
+    }
+    return this._strokeStyleCache;
   }
 
   _drawDot(pos) {
@@ -268,6 +282,10 @@ export class CanvasEngine {
   }
 
   _getMirroredPoints(x, y) {
+    const cacheKey = `${x},${y}`;
+    if (this._mirroredPointsCache.has(cacheKey)) {
+      return this._mirroredPointsCache.get(cacheKey);
+    }
     const cx = this.width / 2;
     const cy = this.height / 2;
     const pts = [];
@@ -282,6 +300,11 @@ export class CanvasEngine {
       pts.push({ x: cx - dy, y: cy + dx });
       pts.push({ x: cx + dy, y: cy - dx });
       pts.push({ x: cx - dy, y: cy - dx });
+    }
+    this._mirroredPointsCache.set(cacheKey, pts);
+    if (this._mirroredPointsCache.size > 500) {
+      const firstKey = this._mirroredPointsCache.keys().next().value;
+      this._mirroredPointsCache.delete(firstKey);
     }
     return pts;
   }
@@ -365,9 +388,10 @@ export class CanvasEngine {
     }
     this.ctx.restore();
     if (this.mirrorMode > 0) {
-      for (const m of this._getMirroredPoints(pos.x, pos.y)) {
-        this.ctx.save();
-        this.ctx.fillStyle = this.color;
+      const mirrored = this._getMirroredPoints(pos.x, pos.y);
+      this.ctx.save();
+      this.ctx.fillStyle = this.color;
+      for (const m of mirrored) {
         for (let i = 0; i < density; i++) {
           const angle = Math.random() * Math.PI * 2;
           const dist = Math.random() * radius;
@@ -375,8 +399,8 @@ export class CanvasEngine {
           this.ctx.arc(m.x + Math.cos(angle) * dist, m.y + Math.sin(angle) * dist, Math.random() * 1.5 + 0.5, 0, Math.PI * 2);
           this.ctx.fill();
         }
-        this.ctx.restore();
       }
+      this.ctx.restore();
     }
   }
 }

@@ -3,8 +3,10 @@ import json
 import random
 import base64
 import datetime
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, unquote
+from functools import lru_cache
 
 HOST_NAME = "0.0.0.0"
 PORT = 8000
@@ -31,6 +33,9 @@ MIME_TYPES = {
     ".woff":  "font/woff",
     ".woff2": "font/woff2",
 }
+
+FILE_CACHE = {}
+CACHE_MAX_AGE = 3600
 
 
 class ArtStudioHandler(BaseHTTPRequestHandler):
@@ -79,15 +84,47 @@ class ArtStudioHandler(BaseHTTPRequestHandler):
             self._set_headers(404, "text/plain")
             self.wfile.write(b"404 Not Found")
             return
+        
+        cache_key = requested_path
+        current_mtime = os.path.getmtime(requested_path)
+        
+        if cache_key in FILE_CACHE:
+            cached_data, cached_mtime, cached_etag = FILE_CACHE[cache_key]
+            if cached_mtime == current_mtime:
+                if self.headers.get("If-None-Match") == cached_etag:
+                    self.send_response(304)
+                    self.end_headers()
+                    return
+                ext = os.path.splitext(requested_path)[1].lower()
+                mime_type = MIME_TYPES.get(ext, "application/octet-stream")
+                self.send_response(200)
+                self.send_header("Content-type", mime_type)
+                self.send_header("Content-Length", str(len(cached_data)))
+                self.send_header("ETag", cached_etag)
+                self.send_header("Cache-Control", f"public, max-age={CACHE_MAX_AGE}")
+                self.end_headers()
+                self.wfile.write(cached_data)
+                return
+        
         ext = os.path.splitext(requested_path)[1].lower()
         mime_type = MIME_TYPES.get(ext, "application/octet-stream")
         try:
             with open(requested_path, "rb") as f:
                 file_content = f.read()
+            
+            file_hash = hashlib.md5(file_content).hexdigest()
+            etag = f'"{file_hash}"'
+            FILE_CACHE[cache_key] = (file_content, current_mtime, etag)
+            
+            if len(FILE_CACHE) > 100:
+                oldest_key = next(iter(FILE_CACHE))
+                del FILE_CACHE[oldest_key]
+            
             self.send_response(200)
             self.send_header("Content-type", mime_type)
             self.send_header("Content-Length", str(len(file_content)))
-            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", f"public, max-age={CACHE_MAX_AGE}")
             self.end_headers()
             self.wfile.write(file_content)
         except Exception as e:
