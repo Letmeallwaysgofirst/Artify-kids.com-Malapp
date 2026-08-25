@@ -453,24 +453,34 @@ export class CanvasEngine {
         Math.abs(startG - targetColor.g) < 5 && 
         Math.abs(startB - targetColor.b) < 5) return;
 
-    // Harte Grenze: Alles dunkler als 80 ist eine Wand
-    const LINE_THRESHOLD = 80;
+    // Harte Grenze: Alles dunkler als 60 ist eine Wand (etwas strenger)
+    const LINE_THRESHOLD = 60;
     const startLuma = 0.299 * startR + 0.587 * startG + 0.114 * startB;
     
     // Wenn wir auf einer Linie klicken, nichts tun
     if (startLuma < LINE_THRESHOLD) return;
 
-    // Prüft ob Pixel gefüllt werden darf
+    // Prüft ob Pixel gefüllt werden darf - STRENGERE GRENZEN
     const canFill = (idx) => {
       if (data[idx + 3] === 0) return false; // Transparent = Grenze
-      const luma = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-      if (luma < LINE_THRESHOLD) return false; // Dunkle Linie = Grenze
       
-      // Farbe muss ähnlich zur Startfarbe sein
-      const dr = data[idx] - startR;
-      const dg = data[idx + 1] - startG;
-      const db = data[idx + 2] - startB;
-      return (dr * dr + dg * dg + db * db) <= 400; // Toleranz 20^2
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      
+      // Harte Grenze: Dunkle Linien stoppen den Fill
+      const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+      if (luma < LINE_THRESHOLD) return false;
+      
+      // Sehr strenge Farbähnlichkeit - nur fast identische Farben werden gefüllt
+      // Dies verhindert, dass verschiedene Bereiche miteinander verschmelzen
+      const dr = r - startR;
+      const dg = g - startG;
+      const db = b - startB;
+      const colorDist = dr * dr + dg * dg + db * db;
+      
+      // Toleranz reduziert von 400 (20^2) auf 100 (10^2) für präzisere Füllung
+      return colorDist <= 100;
     };
 
     // Einfacher 4-Wege Stack Algorithmus
